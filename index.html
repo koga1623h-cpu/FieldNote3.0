@@ -2020,30 +2020,48 @@ const TAB_ORDER = ['screen-list', 'screen-export', 'screen-summary', 'screen-mas
 let touchStartX = 0;
 let touchStartY = 0;
 let touchStartTime = 0;
+let swipeBlocked = false;
 
 document.addEventListener('touchstart', (e) => {
+  swipeBlocked = false;
   // フォーム・詳細画面ではスワイプ無効
   const active = document.querySelector('.screen.active');
-  if (!active || ['screen-form', 'screen-detail'].includes(active.id)) return;
-  // セレクト・テキストエリア・ボタン上はスキップ
-  if (e.target.closest('select, textarea, input, .facility-group-body, .visit-card, .flag-chip, button')) return;
-  touchStartX = e.touches[0].clientX;
+  if (!active || ['screen-form', 'screen-detail'].includes(active.id)) {
+    swipeBlocked = true;
+    return;
+  }
+  // インタラクティブ要素上はスワイプ無効
+  if (e.target.closest('select, textarea, input, button, label, a, [contenteditable], .facility-group-body, .visit-card, .flag-chip, .item-row, .sort-opt, .nav-tab, .fab')) {
+    swipeBlocked = true;
+    return;
+  }
+  // 画面端は無視（iOSのスワイプバックと干渉）
+  const x = e.touches[0].clientX;
+  const w = window.innerWidth;
+  if (x < 30 || x > w - 30) {
+    swipeBlocked = true;
+    return;
+  }
+  touchStartX = x;
   touchStartY = e.touches[0].clientY;
   touchStartTime = Date.now();
 }, { passive: true });
 
 document.addEventListener('touchend', (e) => {
-  if (!touchStartX) return;
+  if (swipeBlocked || !touchStartX) { touchStartX = 0; return; }
   const active = document.querySelector('.screen.active');
-  if (!active || ['screen-form', 'screen-detail'].includes(active.id)) return;
+  if (!active || ['screen-form', 'screen-detail'].includes(active.id)) { touchStartX = 0; return; }
 
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
   const dt = Date.now() - touchStartTime;
 
-  // 横の移動が縦より大きい / 一定距離以上 / 一定速度
   const absDx = Math.abs(dx), absDy = Math.abs(dy);
-  if (absDx < 60 || absDx < absDy * 1.5 || dt > 600) {
+  // 判定をより厳しく:
+  // - 80px以上の横移動
+  // - 縦移動の2倍以上
+  // - 500ms以内
+  if (absDx < 80 || absDx < absDy * 2 || dt > 500) {
     touchStartX = 0;
     return;
   }
@@ -2052,8 +2070,8 @@ document.addEventListener('touchend', (e) => {
   if (currentIdx === -1) { touchStartX = 0; return; }
 
   let nextIdx = currentIdx;
-  if (dx < 0) nextIdx = currentIdx + 1; // 左にスワイプ → 次のタブ
-  if (dx > 0) nextIdx = currentIdx - 1; // 右にスワイプ → 前のタブ
+  if (dx < 0) nextIdx = currentIdx + 1;
+  if (dx > 0) nextIdx = currentIdx - 1;
 
   if (nextIdx >= 0 && nextIdx < TAB_ORDER.length && nextIdx !== currentIdx) {
     showScreen(TAB_ORDER[nextIdx]);
